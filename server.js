@@ -1,62 +1,91 @@
 const express = require('express');
 const cors = require('cors');
+const bodyParser = require('body-parser');
 const fs = require('fs');
 
 const app = express();
 const PORT = 3000;
 
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
-  next();
-});
-
+// Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-// Health check
-app.get('/', (req, res) => {
-  res.send('Backend is running!');
-});
+// Optional: In-memory log storage
+let errorLogs = [];
 
-// POST /log-error: receive error logs
+// Helper to append logs to a file
+function appendLogToFile(logEntry) {
+  const line = JSON.stringify(logEntry) + '\n';
+  fs.appendFile('error-logs.txt', line, (err) => {
+    if (err) {
+      console.error('❌ Failed to write log to file:', err);
+    }
+  });
+}
+
+// Route to receive error logs from Angular frontend
 app.post('/log-error', (req, res) => {
-  const { message, stack, page } = req.body;
-  const timestamp = new Date().toISOString();
-  const logEntry = { message, stack, page, timestamp };
+  const {
+    message = 'No message',
+    stack_trace = '',
+    route = '',
+    user_agent = '',
+    referer = '',
+    method = 'POST',
+    timestamp = new Date().toISOString()
+  } = req.body;
+
+  const logEntry = {
+    message,
+    stack_trace,
+    route,
+    user_agent,
+    referer,
+    method,
+    timestamp
+  };
 
   console.log('📥 Error received:', logEntry);
 
-  // Append to file
-  fs.appendFile('error-logs.txt', JSON.stringify(logEntry) + '\n', (err) => {
-    if (err) {
-      console.error('Failed to write log to file:', err);
-      return res.status(500).json({ message: 'Failed to log error' });
-    }
-    res.status(200).json({ message: 'Error logged successfully' });
-  });
+  errorLogs.push(logEntry);          // In-memory storage
+  appendLogToFile(logEntry);         // Persist to file
+
+  res.status(200).json({ message: 'Error logged successfully' });
 });
 
-// GET /log-error: return logged errors
+// Route to fetch all error logs
+// Route to retrieve all logs
 app.get('/log-error', (req, res) => {
   fs.readFile('error-logs.txt', 'utf8', (err, data) => {
     if (err) {
-      console.error('Failed to read log file:', err);
+      console.error('❌ Failed to read log file:', err);
       return res.status(500).json({ message: 'Failed to read logs' });
     }
+
     const logs = data
       .split('\n')
       .filter(line => line.trim())
-      .map(line => JSON.parse(line));
+      .map(line => {
+        try {
+          return JSON.parse(line);
+        } catch (e) {
+          console.warn('⚠️ Skipping malformed log line:', line);
+          return null;
+        }
+      })
+      .filter(entry => entry !== null);
+
     res.status(200).json(logs);
   });
 });
 
-// Catch-all for undefined routes
+
+// Catch-all route for undefined endpoints
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
+// Start the server
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  console.log(`🚀 Server is running at http://localhost:${PORT}`);
 });
