@@ -1,32 +1,3 @@
-// const express = require('express');
-// const router = express.Router();
-// const ErrorLog = require('../models/ErrorLog');
-
-// // POST log
-// router.post('log-error/trackit/report', async (req, res) => {
-//   try {
-//     const { message, stack, url, severity, browser } = req.body;
-//     const newLog = new ErrorLog({ message, stack, url, severity, browser });
-//     await newLog.save();
-//     res.status(200).json({ message: 'Log saved successfully' });
-//   } catch (err) {
-//     res.status(500).json({ message: 'Failed to save log', error: err });
-//   }
-// });
-
-// // GET logs
-// router.get('/', async (req, res) => {
-//   try {
-//     const logs = await ErrorLog.find().sort({ timestamp: -1 });
-//     res.status(200).json(logs);
-//   } catch (err) {
-//     res.status(500).json({ message: 'Failed to fetch logs' });
-//   }
-// });
-
-// module.exports = router;
-
-
 // routes/logRoutes.js
 const express = require('express');
 const router = express.Router();

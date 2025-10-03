@@ -1,27 +1,48 @@
-
+// index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const helmet = require('helmet');
+const morgan = require('morgan');
 
-const logsRouter = require('./logs');       // for listing/stats
-const trackitRouter = require('./routes/trackit'); // NEW: for ingest
+const { connectDB } = require('./config/db');
 
-const app = express();
-app.use(cors({ origin: true }));
-app.use(express.json({ limit: '1mb' }));
-
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => { console.error('MongoDB connection failed:', err); process.exit(1); });
-
-// 👇 This matches your frontend baseURL + path exactly:
-app.use('/log-error/trackit', trackitRouter); // POST /log-error/trackit/report
-
-// Keep existing read/stats endpoints for dashboard:
-app.use('/logs', logsRouter);
-
-app.get('/', (_req, res) => res.send('BugLens log API up'));
+// Routers
+const logsRouter = require('./logs');                 // GET /logs
+const trackitRouter = require('./routes/trackit');   // POST /log-error/trackit/report
+const statsRouter = require('./routes/stats');       // GET /stats/summary
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API running at http://localhost:${PORT}`));
+const ORIGIN = process.env.CORS_ORIGIN || '*';
+
+async function start() {
+  await connectDB(process.env.MONGO_URI);
+
+  const app = express();
+
+  app.use(helmet());
+  app.use(cors({ origin: ORIGIN, credentials: true }));
+  app.use(express.json({ limit: '1mb' }));
+  app.use(morgan('tiny'));
+
+  app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  app.use('/log-error/trackit', trackitRouter);
+  app.use('/logs', logsRouter);
+  app.use('/stats', statsRouter); // 👈 mount stats
+
+  app.get('/', (_req, res) => res.send('BugLens log API up'));
+
+  app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found' }));
+  app.use((err, _req, res, _next) => {
+    console.error('API error:', err);
+    res.status(500).json({ ok: false, error: err.message || 'Server error' });
+  });
+
+  app.listen(PORT, () => console.log(`🚀 API running at http://localhost:${PORT}`));
+}
+
+start().catch((e) => {
+  console.error('Fatal bootstrap error:', e);
+  process.exit(1);
+});
